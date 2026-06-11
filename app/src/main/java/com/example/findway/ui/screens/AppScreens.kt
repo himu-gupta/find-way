@@ -4,6 +4,7 @@ package com.example.findway.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,7 +48,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.findway.domain.TrailPoint
 import com.example.findway.theme.FindWayTheme
+import com.example.findway.ui.model.ReadinessItem
+import com.example.findway.ui.model.TrailMapState
+import kotlin.math.max
 
 @Composable
 fun HomeScreen(
@@ -64,13 +69,21 @@ fun HomeScreen(
     ) {
       item {
         Text(
-          text = "Your way back, saved before you need it.",
+          text = "Ready for the trail?",
           style = MaterialTheme.typography.headlineMedium,
           fontWeight = FontWeight.Bold,
         )
       }
       item {
-        RoutePreviewCard(status = "Offline ready", distance = "0.0 km", accuracy = "GPS waiting")
+        TrailReadinessCard(
+          items =
+            listOf(
+              ReadinessItem(label = "Precise location", value = "Checked at start", isReady = true),
+              ReadinessItem(label = "Offline recording", value = "Available", isReady = true),
+              ReadinessItem(label = "Battery", value = "82%", isReady = true),
+              ReadinessItem(label = "Trail storage", value = "Available", isReady = true),
+            ),
+        )
       }
       item {
         Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onStartTrail) {
@@ -85,8 +98,8 @@ fun HomeScreen(
       }
       item {
         SafetyNote(
-          title = "Safety first",
-          body = "Find Way will record breadcrumbs while tracking is active. It is a backup aid, not a replacement for maps or emergency judgment.",
+          title = "Start before you leave",
+          body = "Tracking begins only after you tap Start Trail. Confirm the recording indicator before moving away from your starting point.",
         )
       }
     }
@@ -105,7 +118,7 @@ fun TrackingScreen(
       contentPadding = PaddingValues(20.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      item { RoutePreviewCard(status = "Recording active", distance = "2.4 km", accuracy = "GPS good") }
+      item { ActiveTrailCard(state = sampleActiveTrail) }
       item {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
           TrailMetric(label = "Elapsed", value = "42m", modifier = Modifier.weight(1f))
@@ -195,7 +208,14 @@ fun TrailDetailScreen(
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Text("Trail $trailId", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-      RoutePreviewCard(status = "Saved route", distance = "5.6 km", accuracy = "342 breadcrumbs")
+      ActiveTrailCard(
+        state =
+          sampleActiveTrail.copy(
+            distanceLabel = "5.6 km",
+            accuracyLabel = "Saved route",
+            breadcrumbCount = 342,
+          ),
+      )
       Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onRetrace) { Text("Retrace Route") }
     }
   }
@@ -256,54 +276,151 @@ private fun FindWayScaffold(
 }
 
 @Composable
-private fun RoutePreviewCard(
-  status: String,
-  distance: String,
-  accuracy: String,
+private fun TrailReadinessCard(
+  items: List<ReadinessItem>,
 ) {
   Card(
     shape = RoundedCornerShape(8.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     modifier = Modifier.fillMaxWidth(),
   ) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-      Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-        AssistChip(onClick = {}, label = { Text(status) })
-        Text(distance, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          Text("Trail readiness", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+          Text("Core checks before recording", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("READY", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
       }
-      BreadcrumbMap(modifier = Modifier.fillMaxWidth().height(180.dp))
-      Text(accuracy, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      items.forEachIndexed { index, item ->
+        ReadinessRow(item)
+        if (index != items.lastIndex) {
+          Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)))
+        }
+      }
     }
   }
 }
 
 @Composable
-private fun BreadcrumbMap(modifier: Modifier = Modifier) {
+private fun ReadinessRow(item: ReadinessItem) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+      Box(
+        Modifier.size(10.dp)
+          .background(
+            if (item.isReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
+            CircleShape,
+          ),
+      )
+      Text(item.label, fontWeight = FontWeight.Medium)
+    }
+    Text(item.value, color = MaterialTheme.colorScheme.onSurfaceVariant)
+  }
+}
+
+@Composable
+private fun ActiveTrailCard(state: TrailMapState) {
+  Card(
+    shape = RoundedCornerShape(8.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    modifier = Modifier.fillMaxWidth(),
+  ) {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+      Row(
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          Text("Live breadcrumb trail", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+          Text("${state.breadcrumbCount} points recorded", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(state.distanceLabel, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+      }
+      BreadcrumbMap(points = state.breadcrumbs, modifier = Modifier.fillMaxWidth().height(220.dp))
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+          Box(Modifier.size(9.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+          Text("Recording", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        }
+        Text(state.accuracyLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+    }
+  }
+}
+
+@Composable
+private fun BreadcrumbMap(
+  points: List<TrailPoint>,
+  modifier: Modifier = Modifier,
+) {
   val routeColor = MaterialTheme.colorScheme.tertiary
-  val pointColor = MaterialTheme.colorScheme.primary
+  val startColor = MaterialTheme.colorScheme.primary
+  val currentColor = MaterialTheme.colorScheme.tertiary
   val background = MaterialTheme.colorScheme.surface
-  Canvas(modifier = modifier.background(background, RoundedCornerShape(8.dp)).semantics { contentDescription = "Breadcrumb route preview" }) {
+  Canvas(
+    modifier =
+      modifier
+        .background(background, RoundedCornerShape(8.dp))
+        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f), RoundedCornerShape(8.dp))
+        .semantics { contentDescription = "Recorded breadcrumb route with ${points.size} points" },
+  ) {
+    val horizontalPadding = size.width * 0.12f
+    val verticalPadding = size.height * 0.14f
+    val mapWidth = size.width - horizontalPadding * 2
+    val mapHeight = size.height - verticalPadding * 2
+
+    repeat(3) { index ->
+      val y = verticalPadding + mapHeight * (index + 1) / 4f
+      drawLine(
+        color = startColor.copy(alpha = 0.10f),
+        start = Offset(horizontalPadding, y),
+        end = Offset(size.width - horizontalPadding, y),
+        strokeWidth = 1.dp.toPx(),
+      )
+    }
+
+    if (points.isEmpty()) return@Canvas
+
+    val minLat = points.minOf { it.latitude }
+    val maxLat = points.maxOf { it.latitude }
+    val minLon = points.minOf { it.longitude }
+    val maxLon = points.maxOf { it.longitude }
+    val latSpan = max(maxLat - minLat, 0.000001)
+    val lonSpan = max(maxLon - minLon, 0.000001)
+    val offsets =
+      points.map { point ->
+        Offset(
+          x = horizontalPadding + (((point.longitude - minLon) / lonSpan).toFloat() * mapWidth),
+          y = verticalPadding + ((1f - ((point.latitude - minLat) / latSpan).toFloat()) * mapHeight),
+        )
+      }
     val path =
       Path().apply {
-        moveTo(size.width * 0.14f, size.height * 0.78f)
-        cubicTo(size.width * 0.32f, size.height * 0.62f, size.width * 0.28f, size.height * 0.28f, size.width * 0.50f, size.height * 0.38f)
-        cubicTo(size.width * 0.70f, size.height * 0.48f, size.width * 0.66f, size.height * 0.14f, size.width * 0.86f, size.height * 0.22f)
+        moveTo(offsets.first().x, offsets.first().y)
+        offsets.drop(1).forEach { lineTo(it.x, it.y) }
       }
-    drawLine(
-      color = pointColor.copy(alpha = 0.15f),
-      start = Offset(size.width * 0.1f, size.height * 0.3f),
-      end = Offset(size.width * 0.92f, size.height * 0.3f),
-      strokeWidth = 2.dp.toPx(),
-    )
-    drawLine(
-      color = pointColor.copy(alpha = 0.15f),
-      start = Offset(size.width * 0.1f, size.height * 0.58f),
-      end = Offset(size.width * 0.92f, size.height * 0.58f),
-      strokeWidth = 2.dp.toPx(),
-    )
+
     drawPath(path = path, color = routeColor, style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round))
-    drawCircle(color = pointColor, radius = 8.dp.toPx(), center = Offset(size.width * 0.14f, size.height * 0.78f))
-    drawCircle(color = routeColor, radius = 8.dp.toPx(), center = Offset(size.width * 0.86f, size.height * 0.22f))
+    offsets.dropLast(1).forEach { offset ->
+      drawCircle(color = routeColor.copy(alpha = 0.55f), radius = 3.dp.toPx(), center = offset)
+    }
+    drawCircle(color = startColor, radius = 9.dp.toPx(), center = offsets.first())
+    drawCircle(color = background, radius = 11.dp.toPx(), center = offsets.last())
+    drawCircle(color = currentColor, radius = 8.dp.toPx(), center = offsets.last())
   }
 }
 
@@ -487,6 +604,26 @@ private val sampleTrails =
     SampleTrail("morning-ridge", "Morning Ridge", "5.6 km, 342 breadcrumbs"),
     SampleTrail("camp-loop", "Camp Loop", "1.8 km, 104 breadcrumbs"),
     SampleTrail("wadi-lookout", "Wadi Lookout", "3.2 km, 218 breadcrumbs"),
+  )
+
+private val sampleActiveTrail =
+  TrailMapState(
+    breadcrumbs =
+      listOf(
+        TrailPoint(25.28510, 51.53010),
+        TrailPoint(25.28518, 51.53028),
+        TrailPoint(25.28535, 51.53042),
+        TrailPoint(25.28555, 51.53058),
+        TrailPoint(25.28576, 51.53092),
+        TrailPoint(25.28570, 51.53120),
+        TrailPoint(25.28588, 51.53146),
+        TrailPoint(25.28612, 51.53162),
+        TrailPoint(25.28605, 51.53192),
+        TrailPoint(25.28630, 51.53218),
+      ),
+    distanceLabel = "2.4 km",
+    accuracyLabel = "GPS ±6 m",
+    breadcrumbCount = 186,
   )
 
 @Preview(showBackground = true)

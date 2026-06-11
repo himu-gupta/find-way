@@ -29,7 +29,8 @@ Implemented:
 - Single-activity, edge-to-edge application
 - Type-safe, saveable Navigation 3 routes
 - Home, Tracking, Return Mode, Saved Trails, Trail Detail, SOS, and Settings screens
-- Initial breadcrumb route visualization
+- Pre-trail readiness dashboard for location, offline recording, battery, and storage
+- Data-driven breadcrumb route visualization with start and current-position markers
 - Bearing-driven compass arrow toward the next return breadcrumb
 - Pure Kotlin return-progress calculation
 - Unit and instrumented Compose tests
@@ -122,6 +123,8 @@ app/src/main/java/com/example/findway/
 |-- domain/
 |   `-- TrailProgress.kt         # Breadcrumb return-progress logic
 |-- theme/                       # Material 3 colors, typography, and theme
+|-- ui/model/
+|   `-- TrailUiModels.kt         # Readiness and breadcrumb-map UI state
 `-- ui/screens/
     `-- AppScreens.kt            # Current Compose screen prototypes
 
@@ -185,7 +188,8 @@ Current coverage includes:
 - Empty-route return behavior
 - Selecting the previous breadcrumb from the end of a recorded route
 - Off-route threshold detection
-- Presence of the Home screen's primary safety actions
+- Presence of the Home screen's readiness state and primary safety actions
+- Presence of active tracking status, recorded-point count, breadcrumb route, and return action
 
 ## Development Roadmap
 

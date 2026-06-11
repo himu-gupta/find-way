@@ -27,6 +27,8 @@ class HomeScreenTest {
 
   @Test
   fun homeScreen_showsPrimarySafetyActions() {
+    composeTestRule.onNodeWithText("Trail readiness").assertExists()
+    composeTestRule.onNodeWithText("Precise location").assertExists()
     composeTestRule.onNodeWithText("Start Trail").assertExists()
     composeTestRule.onNodeWithText("Saved Trails").assertExists()
     composeTestRule.onNodeWithText("SOS").assertExists()

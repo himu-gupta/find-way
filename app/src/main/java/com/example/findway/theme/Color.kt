@@ -2,10 +2,12 @@ package com.example.findway.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val Forest80 = Color(0xFF9DD8B2)
+val Sky80 = Color(0xFFA7D3E8)
+val SafetyOrange80 = Color(0xFFFFBF7A)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val Forest40 = Color(0xFF1D6B46)
+val Sky40 = Color(0xFF2C6F8F)
+val SafetyOrange40 = Color(0xFFB85C00)
+val TrailSurfaceLight = Color(0xFFF8F6EF)
+val TrailSurfaceDark = Color(0xFF111D18)

@@ -20,7 +20,7 @@ Find Way is intended to be an offline-first safety aid with a calm, readable int
 
 ## Project Status
 
-Find Way is currently in the **application foundation and UI prototype stage**.
+Find Way is currently a **functional Android MVP vertical slice**. The primary journey records real fused-location updates into Room, calculates route distance, persists completed trails, and guides the user back through recorded breadcrumbs using live compass heading.
 
 Implemented:
 
@@ -29,24 +29,47 @@ Implemented:
 - Single-activity, edge-to-edge application
 - Type-safe, saveable Navigation 3 routes
 - Home, Tracking, Return Mode, Saved Trails, Trail Detail, SOS, and Settings screens
-- Pre-trail readiness dashboard for location, offline recording, battery, and storage
-- Data-driven breadcrumb route visualization with start and current-position markers
-- Bearing-driven compass arrow toward the next return breadcrumb
+- Runtime foreground location permission flow
+- Device-backed readiness dashboard for permission, battery, and available storage
+- Fused Location Provider updates in a `location` foreground service
+- Ongoing recording notification with a stop action
+- Room persistence for trails and ordered GPS breadcrumbs
+- GPS accuracy and duplicate/inaccurate-point filtering
+- Live route distance, elapsed time, breadcrumb count, and accuracy
+- Data-driven breadcrumb visualization with start and current-position markers
+- Sensor-driven compass arrow toward the next return breadcrumb
 - Pure Kotlin return-progress calculation
+- Persisted Saved Trails and Trail Detail screens
+- Current-coordinate sharing and emergency dial intent
+- Hilt dependency injection
 - Unit and instrumented Compose tests
-- Successful build, launch, and test verification on an Android emulator
+- Room database integration test
+- Successful emulator journey using injected GPS coordinates
 
 Not implemented yet:
 
-- Live GPS collection
-- Foreground location service
-- Runtime location permission flow
-- Room persistence for trails and breadcrumbs
 - Real map or offline map rendering
-- Sensor-based compass heading
-- Production SOS sharing and emergency calling
+- Starting return guidance from a previously completed trail
+- User-configurable recording and alert settings
+- Off-route vibration and sound alerts
+- GPX import and export
+- Physical-device field and battery testing
+- Production emergency-service localization
 
-The current screens contain representative data while the tracking infrastructure is developed.
+The app does not insert demonstration trails or route metrics. Empty and waiting states remain visible until the device supplies GPS and sensor data.
+
+## Verified Recording Journey
+
+The current implementation was verified on an Android emulator by:
+
+1. Granting precise foreground location and notification permissions.
+2. Starting the location foreground service from Home.
+3. Injecting changing GPS coordinates through the emulator.
+4. Confirming accepted points, measured distance, elapsed time, and GPS accuracy on Tracking.
+5. Confirming calculated bearing, next-point distance, and remaining distance in Return Mode.
+6. Stopping recording and confirming the completed trail appeared in Saved Trails.
+
+One verification run recorded four accepted breadcrumbs over 105 m. A second run produced the screenshots above from three accepted breadcrumbs over 83 m.
 
 ## Product Goals
 
@@ -64,14 +87,14 @@ Find Way is a navigation aid, not a replacement for emergency services, prepared
 - **Language:** Kotlin 2.3
 - **UI:** Jetpack Compose with Material 3
 - **Navigation:** Jetpack Navigation 3 with serializable `NavKey` routes
-- **Architecture direction:** UI, domain, and data layers with unidirectional data flow
+- **Architecture:** UI, domain, data, device, and location layers with unidirectional data flow
 - **Asynchronous work:** Kotlin Coroutines and Flow
 - **Build system:** Gradle 9.1 with Android Gradle Plugin 9
 - **Android SDK:** compile/target SDK 36, minimum SDK 24
 - **Java:** Java 17 source compatibility using JDK 21 toolchain
 - **Testing:** JUnit 4 and Android Compose UI testing
 
-Planned platform components include Room, DataStore, Hilt, Fused Location Provider, and an Android location foreground service.
+Room, Hilt, Fused Location Provider, Android sensors, and a location foreground service are integrated. DataStore remains planned for future user settings.
 
 ## Current Navigation
 
@@ -94,13 +117,13 @@ Navigation state uses `rememberNavBackStack`, allowing the back stack to survive
 ```text
 Compose Screen
     |
-Screen ViewModel / UI State
+App ViewModel / Immutable UI State
     |
-Domain Use Cases
+Domain Calculations and Filtering
     |
 Repositories
     |
-Room | Location Provider | Sensors | DataStore
+Room | Foreground Location Service | Sensors | Device Status
 ```
 
 The application will follow these principles:
@@ -118,21 +141,28 @@ The application will follow these principles:
 ```text
 app/src/main/java/com/example/findway/
 |-- MainActivity.kt              # Single Android activity
+|-- FindWayApplication.kt        # Hilt application entry point
 |-- Navigation.kt                # Navigation 3 graph and destination wiring
 |-- NavigationKeys.kt            # Typed navigation keys
+|-- data/                         # Room repository and persistent entities
+|-- device/                       # Battery and storage readiness state
 |-- domain/
-|   `-- TrailProgress.kt         # Breadcrumb return-progress logic
+|   |-- TrailProgress.kt         # Breadcrumb return-progress logic
+|   `-- BreadcrumbAcceptancePolicy.kt
+|-- location/                     # Foreground recorder and compass heading
 |-- theme/                       # Material 3 colors, typography, and theme
 |-- ui/model/
+|   |-- AppUiState.kt            # Device and repository-backed screen state
 |   `-- TrailUiModels.kt         # Readiness and breadcrumb-map UI state
+|-- ui/AppViewModel.kt           # State aggregation and recording actions
 `-- ui/screens/
-    `-- AppScreens.kt            # Current Compose screen prototypes
+    `-- AppScreens.kt            # Compose screens and state rendering
 
 app/src/test/                    # Local JVM unit tests
 app/src/androidTest/             # Emulator/device Compose tests
 ```
 
-The screen file will be separated into feature packages as each feature gains state, ViewModels, repositories, and production behavior.
+The screen file will be separated into feature packages as the application grows beyond the current MVP scope.
 
 ## Getting Started
 
@@ -190,6 +220,8 @@ Current coverage includes:
 - Off-route threshold detection
 - Presence of the Home screen's readiness state and primary safety actions
 - Presence of active tracking status, recorded-point count, breadcrumb route, and return action
+- Breadcrumb accuracy and movement filtering
+- Room persistence across active and completed trail states
 
 ## Development Roadmap
 
@@ -197,31 +229,31 @@ Current coverage includes:
 
 - [x] Compose project and theme
 - [x] Navigation 3 app shell
-- [x] Core screen prototypes
+- [x] Core state-driven screens
 - [x] Initial unit and Compose tests
+- [x] Hilt dependency injection
 - [ ] Split screens into feature packages
-- [ ] Add Hilt dependency injection
 
 ### Phase 2: Trail Storage
 
-- [ ] Define trail, breadcrumb, and marker models
-- [ ] Add Room database and DAOs
-- [ ] Add repository interfaces and in-memory test fakes
-- [ ] Persist active and completed trails
+- [x] Define trail and breadcrumb models
+- [x] Add Room database and DAO
+- [x] Add repository interface and Room implementation
+- [x] Persist active and completed trails
 
 ### Phase 3: Location Recording
 
-- [ ] Add location permission education and requests
-- [ ] Integrate Fused Location Provider
-- [ ] Add a location foreground service and persistent notification
-- [ ] Filter inaccurate and duplicate points
+- [x] Add contextual foreground location permission requests
+- [x] Integrate Fused Location Provider
+- [x] Add a location foreground service and persistent notification
+- [x] Filter inaccurate and redundant points
 - [ ] Add battery-aware recording profiles
 
 ### Phase 4: Return Guidance
 
-- [ ] Connect return progress to live location
-- [ ] Add compass and bearing guidance
-- [ ] Render the recorded route and current position
+- [x] Connect active-trail return progress to live recorded location
+- [x] Add sensor-backed compass and bearing guidance
+- [x] Render the recorded route and current position
 - [ ] Add off-route vibration and sound alerts
 - [ ] Handle weak, approximate, and unavailable GPS states
 

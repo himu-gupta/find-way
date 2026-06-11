@@ -14,6 +14,7 @@ Find Way is intended to be an offline-first safety aid with a calm, readable int
   <tr>
     <td align="center"><img src="docs/screenshots/home.png" alt="Find Way home screen" width="360" /><br /><strong>Home</strong></td>
     <td align="center"><img src="docs/screenshots/tracking.png" alt="Find Way active tracking screen" width="360" /><br /><strong>Active tracking</strong></td>
+    <td align="center"><img src="docs/screenshots/return-mode.png" alt="Find Way directional return mode" width="360" /><br /><strong>Directional return</strong></td>
   </tr>
 </table>
 
@@ -29,6 +30,7 @@ Implemented:
 - Type-safe, saveable Navigation 3 routes
 - Home, Tracking, Return Mode, Saved Trails, Trail Detail, SOS, and Settings screens
 - Initial breadcrumb route visualization
+- Bearing-driven compass arrow toward the next return breadcrumb
 - Pure Kotlin return-progress calculation
 - Unit and instrumented Compose tests
 - Successful build, launch, and test verification on an Android emulator

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,6 +40,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -133,19 +133,33 @@ fun ReturnModeScreen(
   onOpenSos: () -> Unit,
 ) {
   FindWayScaffold(title = "Return Mode", onBack = onBack, actions = { TextButton(onClick = onOpenSos) { Text("SOS") } }) { innerPadding ->
-    Column(
-      modifier = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding).padding(20.dp),
+    LazyColumn(
+      modifier = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding),
+      contentPadding = PaddingValues(20.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-      Text("Take Me Back", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-      CompassCard()
-      Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-        TrailMetric(label = "Next point", value = "120 m", modifier = Modifier.weight(1f))
-        TrailMetric(label = "Remaining", value = "5.6 km", modifier = Modifier.weight(1f))
+      item { Text("Take Me Back", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold) }
+      item {
+        DirectionCompassCard(
+          targetBearingDegrees = 42f,
+          deviceHeadingDegrees = 0f,
+          distanceMeters = 120,
+          gpsAccuracy = "GPS good",
+        )
       }
-      SafetyNote(title = "On path", body = "Stay close to the orange breadcrumb line. The app will warn you when you drift away.")
-      Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onOpenSos) { Text("Open SOS") }
+      item {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+          TrailMetric(label = "Next point", value = "120 m", modifier = Modifier.weight(1f))
+          TrailMetric(label = "Remaining", value = "5.6 km", modifier = Modifier.weight(1f))
+        }
+      }
+      item {
+        SafetyNote(title = "On path", body = "Stay close to the orange breadcrumb line. The app will warn you when you drift away.")
+      }
+      item {
+        Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onOpenSos) { Text("Open SOS") }
+      }
     }
   }
 }
@@ -308,23 +322,105 @@ private fun TrailMetric(
 }
 
 @Composable
-private fun CompassCard() {
-  Card(shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+private fun DirectionCompassCard(
+  targetBearingDegrees: Float,
+  deviceHeadingDegrees: Float,
+  distanceMeters: Int,
+  gpsAccuracy: String,
+) {
+  val relativeBearing = (targetBearingDegrees - deviceHeadingDegrees + 360f) % 360f
+  val cardinalDirection = cardinalDirection(targetBearingDegrees)
+  Card(
+    shape = RoundedCornerShape(8.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    modifier = Modifier.fillMaxWidth(),
+  ) {
     Column(
       modifier = Modifier.padding(20.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+      Text("Follow the arrow", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
       Box(
-        modifier = Modifier.size(168.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+        modifier =
+          Modifier.size(220.dp)
+            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+            .semantics {
+              contentDescription =
+                "Direction arrow pointing $cardinalDirection at ${targetBearingDegrees.toInt()} degrees"
+            },
         contentAlignment = Alignment.Center,
       ) {
-        Text("N", modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp), color = MaterialTheme.colorScheme.onPrimaryContainer)
-        Text("120 m", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        DirectionArrow(relativeBearingDegrees = relativeBearing, modifier = Modifier.fillMaxSize().padding(26.dp))
+        Text("N", modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp), fontWeight = FontWeight.Bold)
+        Text("E", modifier = Modifier.align(Alignment.CenterEnd).padding(end = 10.dp), fontWeight = FontWeight.SemiBold)
+        Text("S", modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp), fontWeight = FontWeight.SemiBold)
+        Text("W", modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp), fontWeight = FontWeight.SemiBold)
       }
-      Text("Face the next breadcrumb", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Text(
+        "$distanceMeters m to next breadcrumb",
+        style = MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.Bold,
+        textAlign = TextAlign.Center,
+      )
+      Text(
+        "${targetBearingDegrees.toInt()}° $cardinalDirection · $gpsAccuracy",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      Text(
+        "Turn with your phone until the arrow points straight ahead, then walk toward the next breadcrumb.",
+        textAlign = TextAlign.Center,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
     }
   }
+}
+
+@Composable
+private fun DirectionArrow(
+  relativeBearingDegrees: Float,
+  modifier: Modifier = Modifier,
+) {
+  val arrowColor = MaterialTheme.colorScheme.tertiary
+  val arrowOutline = MaterialTheme.colorScheme.onTertiary
+  Canvas(modifier = modifier) {
+    val center = this.center
+    val arrowLength = size.minDimension * 0.42f
+    val headWidth = size.minDimension * 0.13f
+    val headHeight = size.minDimension * 0.18f
+
+    drawCircle(
+      color = arrowColor.copy(alpha = 0.14f),
+      radius = size.minDimension * 0.46f,
+      center = center,
+      style = Stroke(width = 2.dp.toPx()),
+    )
+    rotate(degrees = relativeBearingDegrees, pivot = center) {
+      drawLine(
+        color = arrowColor,
+        start = Offset(center.x, center.y + arrowLength * 0.45f),
+        end = Offset(center.x, center.y - arrowLength + headHeight * 0.45f),
+        strokeWidth = 14.dp.toPx(),
+        cap = StrokeCap.Round,
+      )
+      val arrowHead =
+        Path().apply {
+          moveTo(center.x, center.y - arrowLength)
+          lineTo(center.x - headWidth, center.y - arrowLength + headHeight)
+          lineTo(center.x + headWidth, center.y - arrowLength + headHeight)
+          close()
+        }
+      drawPath(path = arrowHead, color = arrowColor)
+      drawPath(path = arrowHead, color = arrowOutline.copy(alpha = 0.35f), style = Stroke(width = 1.dp.toPx()))
+    }
+    drawCircle(color = arrowColor, radius = 10.dp.toPx(), center = center)
+  }
+}
+
+private fun cardinalDirection(bearingDegrees: Float): String {
+  val directions = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+  val normalized = (bearingDegrees % 360f + 360f) % 360f
+  return directions[((normalized + 22.5f) / 45f).toInt() % directions.size]
 }
 
 @Composable

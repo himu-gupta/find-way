@@ -13,19 +13,38 @@ import androidx.compose.ui.platform.LocalContext
 private val DarkColorScheme =
   darkColorScheme(
     primary = Forest80,
+    onPrimary = OnForestContainerLight,
+    primaryContainer = Forest40,
+    onPrimaryContainer = Forest80,
     secondary = Sky80,
+    secondaryContainer = Sky40,
+    onSecondaryContainer = Sky80,
     tertiary = SafetyOrange80,
+    tertiaryContainer = SafetyOrange40,
+    onTertiaryContainer = OrangeContainerLight,
     background = TrailSurfaceDark,
     surface = TrailSurfaceDark,
+    surfaceContainer = TrailSurfaceContainerDark,
   )
 
 private val LightColorScheme =
   lightColorScheme(
     primary = Forest40,
+    onPrimary = TrailSurfaceLight,
+    primaryContainer = ForestContainerLight,
+    onPrimaryContainer = OnForestContainerLight,
     secondary = Sky40,
+    onSecondary = TrailSurfaceLight,
+    secondaryContainer = SkyContainerLight,
+    onSecondaryContainer = OnSkyContainerLight,
     tertiary = SafetyOrange40,
+    onTertiary = TrailSurfaceLight,
+    tertiaryContainer = OrangeContainerLight,
+    onTertiaryContainer = OnOrangeContainerLight,
     background = TrailSurfaceLight,
     surface = TrailSurfaceLight,
+    surfaceContainer = TrailSurfaceContainerLight,
+    outline = TrailOutlineLight,
 
     /* Other default colors to override
     background = Color(0xFFFFFBFE),
@@ -41,8 +60,7 @@ private val LightColorScheme =
 @Composable
 fun FindWayTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
+  dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
   val colorScheme =

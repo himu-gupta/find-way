@@ -18,6 +18,7 @@ class TrailProgressCalculatorTest {
       )
 
     assertEquals(null, progress.nextPoint)
+    assertEquals(null, progress.bearingToNextDegrees)
     assertEquals(0, progress.remainingDistanceMeters)
     assertFalse(progress.isOffRoute)
   }
@@ -36,8 +37,23 @@ class TrailProgressCalculatorTest {
 
     assertNotNull(progress.nextPoint)
     assertEquals(middle, progress.nextPoint)
+    assertTrue(progress.bearingToNextDegrees in 269..271)
     assertTrue(progress.remainingDistanceMeters in 190..220)
     assertFalse(progress.isOffRoute)
+  }
+
+  @Test
+  fun calculateReturnProgress_toNorthernBreadcrumb_returnsNorthBearing() {
+    val north = TrailPoint(latitude = 25.0010, longitude = 51.0000)
+    val current = TrailPoint(latitude = 25.0000, longitude = 51.0000)
+
+    val progress =
+      calculator.calculateReturnProgress(
+        currentLocation = current,
+        recordedRoute = listOf(north, current),
+      )
+
+    assertTrue(progress.bearingToNextDegrees in 0..1)
   }
 
   @Test

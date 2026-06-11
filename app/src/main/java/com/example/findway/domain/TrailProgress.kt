@@ -17,6 +17,7 @@ data class TrailPoint(
 data class ReturnProgress(
   val nextPoint: TrailPoint?,
   val distanceToNextMeters: Int,
+  val bearingToNextDegrees: Int?,
   val remainingDistanceMeters: Int,
   val offRouteDistanceMeters: Int,
   val isOffRoute: Boolean,
@@ -33,6 +34,7 @@ class TrailProgressCalculator(
       return ReturnProgress(
         nextPoint = null,
         distanceToNextMeters = 0,
+        bearingToNextDegrees = null,
         remainingDistanceMeters = 0,
         offRouteDistanceMeters = 0,
         isOffRoute = false,
@@ -54,6 +56,7 @@ class TrailProgressCalculator(
     return ReturnProgress(
       nextPoint = nextPoint,
       distanceToNextMeters = distanceMeters(currentLocation, nextPoint).roundToInt(),
+      bearingToNextDegrees = initialBearingDegrees(currentLocation, nextPoint).roundToInt() % 360,
       remainingDistanceMeters = remainingDistance.roundToInt(),
       offRouteDistanceMeters = offRouteDistance.roundToInt(),
       isOffRoute = offRouteDistance > offRouteThresholdMeters,
@@ -71,5 +74,14 @@ class TrailProgressCalculator(
         cos(fromLat) * cos(toLat) * sin(deltaLon / 2) * sin(deltaLon / 2)
     val c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return earthRadiusMeters * c
+  }
+
+  private fun initialBearingDegrees(from: TrailPoint, to: TrailPoint): Double {
+    val fromLat = Math.toRadians(from.latitude)
+    val toLat = Math.toRadians(to.latitude)
+    val deltaLon = Math.toRadians(to.longitude - from.longitude)
+    val y = sin(deltaLon) * cos(toLat)
+    val x = cos(fromLat) * sin(toLat) - sin(fromLat) * cos(toLat) * cos(deltaLon)
+    return (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
   }
 }

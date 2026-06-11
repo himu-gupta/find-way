@@ -8,6 +8,15 @@ The core product promise is simple:
 
 Find Way is intended to be an offline-first safety aid with a calm, readable interface that remains useful when connectivity is unavailable and the user is under stress.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/home.png" alt="Find Way home screen" width="360" /><br /><strong>Home</strong></td>
+    <td align="center"><img src="docs/screenshots/tracking.png" alt="Find Way active tracking screen" width="360" /><br /><strong>Active tracking</strong></td>
+  </tr>
+</table>
+
 ## Project Status
 
 Find Way is currently in the **application foundation and UI prototype stage**.

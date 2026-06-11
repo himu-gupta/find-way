@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">Find Way</string>
+    <string name="recording_channel_name">Trail recording</string>
+    <string name="recording_channel_description">Keeps your breadcrumb trail recording while Find Way is not visible.</string>
+    <string name="recording_notification_title">Recording your trail</string>
+    <string name="recording_notification_body">Find Way is saving GPS breadcrumbs for your return.</string>
+    <string name="stop_tracking">Stop tracking</string>
 </resources>

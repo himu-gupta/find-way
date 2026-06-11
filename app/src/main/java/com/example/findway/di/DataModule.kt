@@ -7,6 +7,8 @@ import com.example.findway.data.TrailRepository
 import com.example.findway.data.local.FindWayDatabase
 import com.example.findway.data.local.TrailDao
 import com.example.findway.domain.BreadcrumbAcceptancePolicy
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -33,6 +35,11 @@ object DataModule {
 
   @Provides
   fun provideTrailDao(database: FindWayDatabase): TrailDao = database.trailDao()
+
+  @Provides
+  @Singleton
+  fun provideFusedLocationClient(@ApplicationContext context: Context): FusedLocationProviderClient =
+    LocationServices.getFusedLocationProviderClient(context)
 
   @Provides
   @Singleton

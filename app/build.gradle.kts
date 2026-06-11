@@ -1,6 +1,8 @@
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
+  alias(libs.plugins.google.hilt)
+  alias(libs.plugins.ksp)
   alias(libs.plugins.kotlin.serialization)
 }
 
@@ -51,11 +53,13 @@ dependencies {
   // Core Android dependencies
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.lifecycle.runtime.ktx)
+  implementation(libs.androidx.lifecycle.service)
   implementation(libs.androidx.activity.compose)
 
   // Arch Components
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
+  implementation(libs.androidx.hilt.navigation.compose)
 
   // Compose
   implementation(libs.androidx.compose.ui)
@@ -76,9 +80,18 @@ dependencies {
   androidTestImplementation(libs.androidx.test.ext.junit)
   androidTestImplementation(libs.androidx.test.runner)
   androidTestImplementation(libs.androidx.test.espresso.core)
+  androidTestImplementation(libs.androidx.room.testing)
 
   // Navigation
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
+  // Production storage, location, and dependency injection
+  implementation(libs.androidx.room.ktx)
+  implementation(libs.androidx.room.runtime)
+  implementation(libs.google.hilt.android)
+  implementation(libs.google.play.services.location)
+  ksp(libs.androidx.room.compiler)
+  ksp(libs.google.hilt.compiler)
 }

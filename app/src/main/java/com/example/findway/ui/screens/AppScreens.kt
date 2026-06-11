@@ -30,7 +30,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -50,12 +49,21 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.findway.domain.TrailPoint
 import com.example.findway.theme.FindWayTheme
+import com.example.findway.ui.formatDistance
+import com.example.findway.ui.formatElapsed
+import com.example.findway.ui.model.HomeUiState
 import com.example.findway.ui.model.ReadinessItem
+import com.example.findway.ui.model.ReturnUiState
+import com.example.findway.ui.model.SavedTrailUiItem
+import com.example.findway.ui.model.TrackingUiState
+import com.example.findway.ui.model.TrailDetailUiState
 import com.example.findway.ui.model.TrailMapState
 import kotlin.math.max
 
 @Composable
 fun HomeScreen(
+  state: HomeUiState,
+  hasLocationPermission: Boolean,
   onStartTrail: () -> Unit,
   onOpenSavedTrails: () -> Unit,
   onOpenSos: () -> Unit,
@@ -78,16 +86,28 @@ fun HomeScreen(
         TrailReadinessCard(
           items =
             listOf(
-              ReadinessItem(label = "Precise location", value = "Checked at start", isReady = true),
-              ReadinessItem(label = "Offline recording", value = "Available", isReady = true),
-              ReadinessItem(label = "Battery", value = "82%", isReady = true),
-              ReadinessItem(label = "Trail storage", value = "Available", isReady = true),
+              ReadinessItem(
+                label = "Location access",
+                value = if (hasLocationPermission) "Granted" else "Required",
+                isReady = hasLocationPermission,
+              ),
+              ReadinessItem(label = "Offline recording", value = "On-device", isReady = true),
+              ReadinessItem(
+                label = "Battery",
+                value = state.batteryPercent?.let { "$it%" } ?: "Unavailable",
+                isReady = state.batteryPercent == null || state.batteryPercent >= 20,
+              ),
+              ReadinessItem(
+                label = "Trail storage",
+                value = formatStorage(state.availableStorageBytes),
+                isReady = state.availableStorageBytes >= 100L * 1024 * 1024,
+              ),
             ),
         )
       }
       item {
         Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onStartTrail) {
-          Text("Start Trail")
+          Text(if (state.hasActiveTrail) "Resume Trail" else "Start Trail")
         }
       }
       item {
@@ -108,9 +128,11 @@ fun HomeScreen(
 
 @Composable
 fun TrackingScreen(
+  state: TrackingUiState,
   onBack: () -> Unit,
   onTakeMeBack: () -> Unit,
   onOpenSos: () -> Unit,
+  onStop: () -> Unit,
 ) {
   FindWayScaffold(title = "Tracking", onBack = onBack, actions = { TextButton(onClick = onOpenSos) { Text("SOS") } }) { innerPadding ->
     LazyColumn(
@@ -118,21 +140,37 @@ fun TrackingScreen(
       contentPadding = PaddingValues(20.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      item { ActiveTrailCard(state = sampleActiveTrail) }
+      item {
+        ActiveTrailCard(
+          state =
+            TrailMapState(
+              breadcrumbs = state.breadcrumbs,
+              distanceLabel = formatDistance(state.distanceMeters),
+              accuracyLabel = state.accuracyMeters?.let { "GPS ±${it.toInt()} m" } ?: "Waiting for GPS",
+              breadcrumbCount = state.breadcrumbs.size,
+            ),
+          isLive = true,
+          statusLabel = if (state.isRecording) "Recording" else "Starting",
+        )
+      }
       item {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-          TrailMetric(label = "Elapsed", value = "42m", modifier = Modifier.weight(1f))
-          TrailMetric(label = "Points", value = "186", modifier = Modifier.weight(1f))
-          TrailMetric(label = "Battery", value = "82%", modifier = Modifier.weight(1f))
+          TrailMetric(label = "Elapsed", value = formatElapsed(state.elapsedMillis), modifier = Modifier.weight(1f))
+          TrailMetric(label = "Points", value = state.breadcrumbs.size.toString(), modifier = Modifier.weight(1f))
+          TrailMetric(label = "Accuracy", value = state.accuracyMeters?.let { "${it.toInt()} m" } ?: "--", modifier = Modifier.weight(1f))
         }
       }
       item {
-        Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onTakeMeBack) {
+        Button(
+          modifier = Modifier.fillMaxWidth().height(56.dp),
+          enabled = state.breadcrumbs.size >= 2,
+          onClick = onTakeMeBack,
+        ) {
           Text("Take Me Back")
         }
       }
       item {
-        OutlinedButton(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = onBack) {
+        OutlinedButton(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = onStop) {
           Text("Stop Tracking")
         }
       }
@@ -142,6 +180,7 @@ fun TrackingScreen(
 
 @Composable
 fun ReturnModeScreen(
+  state: ReturnUiState,
   onBack: () -> Unit,
   onOpenSos: () -> Unit,
 ) {
@@ -154,21 +193,45 @@ fun ReturnModeScreen(
     ) {
       item { Text("Take Me Back", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold) }
       item {
-        DirectionCompassCard(
-          targetBearingDegrees = 42f,
-          deviceHeadingDegrees = 0f,
-          distanceMeters = 120,
-          gpsAccuracy = "GPS good",
-        )
-      }
-      item {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-          TrailMetric(label = "Next point", value = "120 m", modifier = Modifier.weight(1f))
-          TrailMetric(label = "Remaining", value = "5.6 km", modifier = Modifier.weight(1f))
+        if (state.targetBearingDegrees != null && state.deviceHeadingDegrees != null) {
+          DirectionCompassCard(
+            targetBearingDegrees = state.targetBearingDegrees,
+            deviceHeadingDegrees = state.deviceHeadingDegrees,
+            distanceMeters = state.distanceToNextMeters,
+            gpsAccuracy = state.accuracyMeters?.let { "GPS ±${it.toInt()} m" } ?: "GPS unavailable",
+          )
+        } else {
+          SafetyNote(
+            title = "Preparing return guidance",
+            body =
+              if (state.breadcrumbs.size < 2) {
+                "At least two recorded GPS breadcrumbs are needed before Find Way can calculate the route back."
+              } else {
+                "Move the phone gently while Find Way waits for a compass heading."
+              },
+          )
         }
       }
       item {
-        SafetyNote(title = "On path", body = "Stay close to the orange breadcrumb line. The app will warn you when you drift away.")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+          TrailMetric(
+            label = "Next point",
+            value = if (state.targetBearingDegrees == null) "--" else "${state.distanceToNextMeters} m",
+            modifier = Modifier.weight(1f),
+          )
+          TrailMetric(label = "Remaining", value = formatDistance(state.remainingDistanceMeters.toDouble()), modifier = Modifier.weight(1f))
+        }
+      }
+      item {
+        SafetyNote(
+          title = if (state.isOffRoute) "Off recorded path" else "On recorded path",
+          body =
+            if (state.isOffRoute) {
+              "You are about ${state.offRouteDistanceMeters} m from the nearest saved breadcrumb. Move carefully toward the arrow."
+            } else {
+              "Find Way is guiding you through the recorded breadcrumbs in reverse order."
+            },
+        )
       }
       item {
         Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onOpenSos) { Text("Open SOS") }
@@ -179,8 +242,9 @@ fun ReturnModeScreen(
 
 @Composable
 fun SavedTrailsScreen(
+  trails: List<SavedTrailUiItem>,
   onBack: () -> Unit,
-  onOpenTrail: (String) -> Unit,
+  onOpenTrail: (Long) -> Unit,
 ) {
   FindWayScaffold(title = "Saved Trails", onBack = onBack) { innerPadding ->
     LazyColumn(
@@ -188,8 +252,16 @@ fun SavedTrailsScreen(
       contentPadding = PaddingValues(20.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      items(sampleTrails.size) { index ->
-        val trail = sampleTrails[index]
+      if (trails.isEmpty()) {
+        item {
+          SafetyNote(
+            title = "No saved trails",
+            body = "A trail appears here after you stop an active recording.",
+          )
+        }
+      }
+      items(trails.size) { index ->
+        val trail = trails[index]
         TrailRow(name = trail.name, detail = trail.detail, onClick = { onOpenTrail(trail.id) })
       }
     }
@@ -198,41 +270,68 @@ fun SavedTrailsScreen(
 
 @Composable
 fun TrailDetailScreen(
-  trailId: String,
+  state: TrailDetailUiState?,
   onBack: () -> Unit,
-  onRetrace: () -> Unit,
 ) {
   FindWayScaffold(title = "Trail Detail", onBack = onBack) { innerPadding ->
     Column(
       modifier = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding).padding(20.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      Text("Trail $trailId", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-      ActiveTrailCard(
-        state =
-          sampleActiveTrail.copy(
-            distanceLabel = "5.6 km",
-            accuracyLabel = "Saved route",
-            breadcrumbCount = 342,
-          ),
-      )
-      Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onRetrace) { Text("Retrace Route") }
+      if (state == null) {
+        Text("Loading saved trail…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      } else {
+        Text(state.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        ActiveTrailCard(
+          state =
+            TrailMapState(
+              breadcrumbs = state.breadcrumbs,
+              distanceLabel = formatDistance(state.distanceMeters),
+              accuracyLabel = "Saved route",
+              breadcrumbCount = state.breadcrumbs.size,
+            ),
+          isLive = false,
+          statusLabel = "Saved",
+        )
+        SafetyNote(
+          title = "Saved route review",
+          body = "Starting guidance from a saved trail will be enabled after current-location matching is implemented.",
+        )
+      }
     }
   }
 }
 
 @Composable
-fun SosScreen(onBack: () -> Unit) {
+fun SosScreen(
+  trackingState: TrackingUiState,
+  onBack: () -> Unit,
+  onShareLocation: () -> Unit,
+  onEmergencyCall: () -> Unit,
+) {
+  val currentPoint = trackingState.breadcrumbs.lastOrNull()
   FindWayScaffold(title = "SOS", onBack = onBack) { innerPadding ->
     Column(
       modifier = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding).padding(20.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Text("Emergency Info", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-      SafetyNote(title = "Current coordinates", body = "25.2854, 51.5310\nAccuracy: waiting for GPS")
-      SafetyNote(title = "Distance from start", body = "2.4 km along recorded route")
-      Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = {}) { Text("Share Location") }
-      OutlinedButton(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = {}) { Text("Emergency Call") }
+      SafetyNote(
+        title = "Current coordinates",
+        body =
+          currentPoint?.let { point ->
+            "%.6f, %.6f\nAccuracy: ±%d m".format(point.latitude, point.longitude, point.accuracyMeters?.toInt() ?: 0)
+          } ?: "Waiting for a recorded GPS position.",
+      )
+      SafetyNote(title = "Distance from start", body = "${formatDistance(trackingState.distanceMeters)} along the recorded route")
+      Button(
+        modifier = Modifier.fillMaxWidth().height(56.dp),
+        enabled = currentPoint != null,
+        onClick = onShareLocation,
+      ) {
+        Text("Share Location")
+      }
+      OutlinedButton(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onEmergencyCall) { Text("Emergency Call") }
     }
   }
 }
@@ -244,9 +343,10 @@ fun SettingsScreen(onBack: () -> Unit) {
       modifier = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding).padding(20.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      SettingRow(title = "Low battery tracking", checked = true)
-      SettingRow(title = "Off-route vibration", checked = true)
-      SettingRow(title = "Use kilometers", checked = true)
+      SafetyNote(
+        title = "No configurable settings yet",
+        body = "Find Way currently uses high-accuracy recording and metric units. Controls will appear here only when they are functional.",
+      )
     }
   }
 }
@@ -279,6 +379,7 @@ private fun FindWayScaffold(
 private fun TrailReadinessCard(
   items: List<ReadinessItem>,
 ) {
+  val isReady = items.all(ReadinessItem::isReady)
   Card(
     shape = RoundedCornerShape(8.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -294,7 +395,11 @@ private fun TrailReadinessCard(
           Text("Trail readiness", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
           Text("Core checks before recording", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text("READY", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+        Text(
+          if (isReady) "READY" else "CHECK",
+          color = if (isReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
+          fontWeight = FontWeight.Bold,
+        )
       }
       items.forEachIndexed { index, item ->
         ReadinessRow(item)
@@ -328,7 +433,11 @@ private fun ReadinessRow(item: ReadinessItem) {
 }
 
 @Composable
-private fun ActiveTrailCard(state: TrailMapState) {
+private fun ActiveTrailCard(
+  state: TrailMapState,
+  isLive: Boolean,
+  statusLabel: String,
+) {
   Card(
     shape = RoundedCornerShape(8.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -341,7 +450,11 @@ private fun ActiveTrailCard(state: TrailMapState) {
         modifier = Modifier.fillMaxWidth(),
       ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-          Text("Live breadcrumb trail", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+          Text(
+            if (isLive) "Live breadcrumb trail" else "Recorded breadcrumb trail",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+          )
           Text("${state.breadcrumbCount} points recorded", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text(state.distanceLabel, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -353,8 +466,15 @@ private fun ActiveTrailCard(state: TrailMapState) {
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-          Box(Modifier.size(9.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
-          Text("Recording", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+          Box(
+            Modifier.size(9.dp)
+              .background(if (statusLabel == "Recording") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape),
+          )
+          Text(
+            statusLabel,
+            color = if (statusLabel == "Recording") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold,
+          )
         }
         Text(state.accuracyLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
@@ -578,59 +698,24 @@ private fun TrailRow(
   }
 }
 
-@Composable
-private fun SettingRow(
-  title: String,
-  checked: Boolean,
-) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.SpaceBetween,
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Text(title, style = MaterialTheme.typography.titleMedium)
-    Switch(checked = checked, onCheckedChange = {})
-  }
+private fun formatStorage(bytes: Long): String {
+  if (bytes <= 0L) return "Unavailable"
+  val gigabytes = bytes.toDouble() / (1024 * 1024 * 1024)
+  return if (gigabytes >= 1) "%.1f GB free".format(gigabytes) else "${bytes / (1024 * 1024)} MB free"
 }
-
-private data class SampleTrail(
-  val id: String,
-  val name: String,
-  val detail: String,
-)
-
-private val sampleTrails =
-  listOf(
-    SampleTrail("morning-ridge", "Morning Ridge", "5.6 km, 342 breadcrumbs"),
-    SampleTrail("camp-loop", "Camp Loop", "1.8 km, 104 breadcrumbs"),
-    SampleTrail("wadi-lookout", "Wadi Lookout", "3.2 km, 218 breadcrumbs"),
-  )
-
-private val sampleActiveTrail =
-  TrailMapState(
-    breadcrumbs =
-      listOf(
-        TrailPoint(25.28510, 51.53010),
-        TrailPoint(25.28518, 51.53028),
-        TrailPoint(25.28535, 51.53042),
-        TrailPoint(25.28555, 51.53058),
-        TrailPoint(25.28576, 51.53092),
-        TrailPoint(25.28570, 51.53120),
-        TrailPoint(25.28588, 51.53146),
-        TrailPoint(25.28612, 51.53162),
-        TrailPoint(25.28605, 51.53192),
-        TrailPoint(25.28630, 51.53218),
-      ),
-    distanceLabel = "2.4 km",
-    accuracyLabel = "GPS ±6 m",
-    breadcrumbCount = 186,
-  )
 
 @Preview(showBackground = true)
 @Composable
 private fun HomeScreenPreview() {
   FindWayTheme(dynamicColor = false) {
-    HomeScreen(onStartTrail = {}, onOpenSavedTrails = {}, onOpenSos = {}, onOpenSettings = {})
+    HomeScreen(
+      state = HomeUiState(),
+      hasLocationPermission = false,
+      onStartTrail = {},
+      onOpenSavedTrails = {},
+      onOpenSos = {},
+      onOpenSettings = {},
+    )
   }
 }
 
@@ -638,6 +723,6 @@ private fun HomeScreenPreview() {
 @Composable
 private fun ReturnModeScreenPreview() {
   FindWayTheme(dynamicColor = false) {
-    ReturnModeScreen(onBack = {}, onOpenSos = {})
+    ReturnModeScreen(state = ReturnUiState(), onBack = {}, onOpenSos = {})
   }
 }

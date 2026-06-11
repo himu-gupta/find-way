@@ -33,7 +33,7 @@ class RoomTrailRepository @Inject constructor(
       trailDao.getActiveTrail()?.trail?.id
         ?: trailDao.insertTrail(
           TrailEntity(
-            name = "Trail $startedAtMillis",
+            name = "Trail",
             startedAtMillis = startedAtMillis,
           ),
         )

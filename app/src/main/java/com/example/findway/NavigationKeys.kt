@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable data object SavedTrails : NavKey
 
-@Serializable data class TrailDetail(val trailId: String) : NavKey
+@Serializable data class TrailDetail(val trailId: Long) : NavKey
 
 @Serializable data object Sos : NavKey
 

@@ -20,7 +20,7 @@ Find Way is intended to be an offline-first safety aid with a calm, readable int
 
 ## Project Status
 
-Find Way is currently a **functional Android MVP vertical slice**. The primary journey records real fused-location updates into Room, calculates route distance, persists completed trails, and guides the user back through recorded breadcrumbs using live compass heading.
+Find Way is currently a **functional Android MVP vertical slice**. The primary journey records real fused-location updates into Room, freezes the outbound route when backtracking starts, and guides the user through each saved breadcrumb in reverse order.
 
 Implemented:
 
@@ -37,8 +37,11 @@ Implemented:
 - GPS accuracy and duplicate/inaccurate-point filtering
 - Live route distance, elapsed time, breadcrumb count, and accuracy
 - Data-driven breadcrumb visualization with start and current-position markers
-- Sensor-driven compass arrow toward the next return breadcrumb
-- Pure Kotlin return-progress calculation
+- Route-specific arrow toward the next saved breadcrumb, rotated by live device heading
+- Frozen outbound route with separate live return-position updates
+- Sequential reverse-breadcrumb navigator with automatic target advancement
+- Highlighted remaining route, current position, next target, and arrival state
+- Segment-based off-route distance calculation
 - Persisted Saved Trails and Trail Detail screens
 - Current-coordinate sharing and emergency dial intent
 - Hilt dependency injection
@@ -55,6 +58,7 @@ Not implemented yet:
 - GPX import and export
 - Physical-device field and battery testing
 - Production emergency-service localization
+- Restoring an in-progress backtrack after full process death
 
 The app does not insert demonstration trails or route metrics. Empty and waiting states remain visible until the device supplies GPS and sensor data.
 
@@ -66,10 +70,12 @@ The current implementation was verified on an Android emulator by:
 2. Starting the location foreground service from Home.
 3. Injecting changing GPS coordinates through the emulator.
 4. Confirming accepted points, measured distance, elapsed time, and GPS accuracy on Tracking.
-5. Confirming calculated bearing, next-point distance, and remaining distance in Return Mode.
-6. Stopping recording and confirming the completed trail appeared in Saved Trails.
+5. Entering Backtrack mode and confirming that new GPS fixes did not change the frozen outbound breadcrumb count.
+6. Moving through recorded coordinates and confirming automatic progression from older breadcrumb to older breadcrumb.
+7. Reaching the first breadcrumb and confirming the completed backtrack state.
+8. Stopping recording and confirming the completed trail appeared in Saved Trails.
 
-One verification run recorded four accepted breadcrumbs over 105 m. A second run produced the screenshots above from three accepted breadcrumbs over 83 m.
+The latest verification recorded five breadcrumbs, entered Backtrack mode, and advanced through the route in reverse. A direct Room query remained at five breadcrumbs during guidance, proving that the return walk was not appended to the outbound route.
 
 ## Product Goals
 
@@ -149,7 +155,7 @@ app/src/main/java/com/example/findway/
 |-- domain/
 |   |-- TrailProgress.kt         # Breadcrumb return-progress logic
 |   `-- BreadcrumbAcceptancePolicy.kt
-|-- location/                     # Foreground recorder and compass heading
+|-- location/                     # Recording/backtrack service, live position, and heading
 |-- theme/                       # Material 3 colors, typography, and theme
 |-- ui/model/
 |   |-- AppUiState.kt            # Device and repository-backed screen state
@@ -216,7 +222,9 @@ With an emulator or device running, execute instrumented Compose tests:
 Current coverage includes:
 
 - Empty-route return behavior
-- Selecting the previous breadcrumb from the end of a recorded route
+- Selecting and advancing through previous breadcrumbs in reverse order
+- Completing only after reaching the first recorded breadcrumb
+- Segment-based on-route and off-route detection
 - Off-route threshold detection
 - Presence of the Home screen's readiness state and primary safety actions
 - Presence of active tracking status, recorded-point count, breadcrumb route, and return action
@@ -251,15 +259,17 @@ Current coverage includes:
 
 ### Phase 4: Return Guidance
 
-- [x] Connect active-trail return progress to live recorded location
-- [x] Add sensor-backed compass and bearing guidance
-- [x] Render the recorded route and current position
+- [x] Freeze the outbound route when Backtrack mode starts
+- [x] Keep live return positions separate from recorded breadcrumbs
+- [x] Advance through saved breadcrumbs in reverse order
+- [x] Add sensor-backed route arrow and bearing guidance
+- [x] Render remaining route, target breadcrumb, and current position
 - [ ] Add off-route vibration and sound alerts
 - [ ] Handle weak, approximate, and unavailable GPS states
 
 ### Phase 5: Safety and Release Readiness
 
-- [ ] Implement coordinate sharing and emergency call intents
+- [x] Implement coordinate sharing and emergency call intents
 - [ ] Add GPX import/export
 - [ ] Add accessibility and adaptive-layout testing
 - [ ] Add database, service, navigation, and end-to-end tests

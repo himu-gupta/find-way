@@ -183,6 +183,7 @@ fun ReturnModeScreen(
   state: ReturnUiState,
   onBack: () -> Unit,
   onOpenSos: () -> Unit,
+  onFinish: () -> Unit,
 ) {
   FindWayScaffold(title = "Return Mode", onBack = onBack, actions = { TextButton(onClick = onOpenSos) { Text("SOS") } }) { innerPadding ->
     LazyColumn(
@@ -191,32 +192,44 @@ fun ReturnModeScreen(
       verticalArrangement = Arrangement.spacedBy(16.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-      item { Text("Take Me Back", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold) }
+      item { Text("Backtrack the Trail", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold) }
       item {
-        if (state.targetBearingDegrees != null && state.deviceHeadingDegrees != null) {
-          DirectionCompassCard(
-            targetBearingDegrees = state.targetBearingDegrees,
-            deviceHeadingDegrees = state.deviceHeadingDegrees,
-            distanceMeters = state.distanceToNextMeters,
-            gpsAccuracy = state.accuracyMeters?.let { "GPS ±${it.toInt()} m" } ?: "GPS unavailable",
+        if (state.isComplete) {
+          SafetyNote(
+            title = "Back at the trail start",
+            body = "You reached the first recorded breadcrumb. End the trail when you are safely oriented.",
           )
+        } else if (state.targetBreadcrumbIndex != null) {
+          BacktrackGuidanceCard(state)
         } else {
           SafetyNote(
             title = "Preparing return guidance",
             body =
               if (state.breadcrumbs.size < 2) {
                 "At least two recorded GPS breadcrumbs are needed before Find Way can calculate the route back."
+              } else if (state.currentLocation == null) {
+                "Waiting for a live GPS position. The recorded route is frozen and will not be changed."
               } else {
-                "Move the phone gently while Find Way waits for a compass heading."
+                "Move the phone gently while Find Way waits for a compass heading. The route remains visible below."
               },
+          )
+        }
+      }
+      if (state.breadcrumbs.size >= 2) {
+        item {
+          BacktrackRouteMap(
+            points = state.breadcrumbs,
+            targetIndex = state.targetBreadcrumbIndex,
+            currentLocation = state.currentLocation,
+            modifier = Modifier.fillMaxWidth().height(220.dp),
           )
         }
       }
       item {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
           TrailMetric(
-            label = "Next point",
-            value = if (state.targetBearingDegrees == null) "--" else "${state.distanceToNextMeters} m",
+            label = "Points left",
+            value = state.targetBreadcrumbIndex?.let { (it + 1).toString() } ?: if (state.isComplete) "0" else "--",
             modifier = Modifier.weight(1f),
           )
           TrailMetric(label = "Remaining", value = formatDistance(state.remainingDistanceMeters.toDouble()), modifier = Modifier.weight(1f))
@@ -224,17 +237,28 @@ fun ReturnModeScreen(
       }
       item {
         SafetyNote(
-          title = if (state.isOffRoute) "Off recorded path" else "On recorded path",
+          title =
+            when {
+              state.isComplete -> "Route complete"
+              state.isOffRoute -> "Off recorded path"
+              else -> "On recorded path"
+            },
           body =
-            if (state.isOffRoute) {
-              "You are about ${state.offRouteDistanceMeters} m from the nearest saved breadcrumb. Move carefully toward the arrow."
-            } else {
-              "Find Way is guiding you through the recorded breadcrumbs in reverse order."
+            when {
+              state.isComplete -> "The live position reached the first saved breadcrumb. Finish the trail to save this recording."
+              state.isOffRoute ->
+                "You are about ${state.offRouteDistanceMeters} m from the saved trail. Move carefully toward the highlighted breadcrumb."
+              else ->
+                "The highlighted route segment and arrow lead to the next older breadcrumb. Each reached point advances the backtrack."
             },
         )
       }
       item {
-        Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onOpenSos) { Text("Open SOS") }
+        if (state.isComplete) {
+          Button(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onFinish) { Text("Finish Trail") }
+        } else {
+          OutlinedButton(modifier = Modifier.fillMaxWidth().height(56.dp), onClick = onOpenSos) { Text("Open SOS") }
+        }
       }
     }
   }
@@ -545,6 +569,86 @@ private fun BreadcrumbMap(
 }
 
 @Composable
+private fun BacktrackRouteMap(
+  points: List<TrailPoint>,
+  targetIndex: Int?,
+  currentLocation: TrailPoint?,
+  modifier: Modifier = Modifier,
+) {
+  val remainingColor = MaterialTheme.colorScheme.tertiary
+  val completedColor = MaterialTheme.colorScheme.outline
+  val startColor = MaterialTheme.colorScheme.primary
+  val currentColor = MaterialTheme.colorScheme.secondary
+  val background = MaterialTheme.colorScheme.surfaceContainer
+  val targetLabel = targetIndex?.let { "breadcrumb ${it + 1} of ${points.size}" } ?: "trail start"
+
+  Canvas(
+    modifier =
+      modifier
+        .background(background, RoundedCornerShape(8.dp))
+        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f), RoundedCornerShape(8.dp))
+        .semantics { contentDescription = "Backtrack route targeting $targetLabel" },
+  ) {
+    if (points.isEmpty()) return@Canvas
+
+    val mapPoints = if (currentLocation == null) points else points + currentLocation
+    val horizontalPadding = size.width * 0.10f
+    val verticalPadding = size.height * 0.14f
+    val mapWidth = size.width - horizontalPadding * 2
+    val mapHeight = size.height - verticalPadding * 2
+    val minLat = mapPoints.minOf { it.latitude }
+    val maxLat = mapPoints.maxOf { it.latitude }
+    val minLon = mapPoints.minOf { it.longitude }
+    val maxLon = mapPoints.maxOf { it.longitude }
+    val latSpan = max(maxLat - minLat, 0.000001)
+    val lonSpan = max(maxLon - minLon, 0.000001)
+
+    fun offset(point: TrailPoint) =
+      Offset(
+        x = horizontalPadding + (((point.longitude - minLon) / lonSpan).toFloat() * mapWidth),
+        y = verticalPadding + ((1f - ((point.latitude - minLat) / latSpan).toFloat()) * mapHeight),
+      )
+
+    val routeOffsets = points.map(::offset)
+    val fullPath =
+      Path().apply {
+        moveTo(routeOffsets.first().x, routeOffsets.first().y)
+        routeOffsets.drop(1).forEach { lineTo(it.x, it.y) }
+      }
+    drawPath(fullPath, completedColor.copy(alpha = 0.45f), style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round))
+
+    if (targetIndex != null) {
+      val remainingOffsets = routeOffsets.take(targetIndex + 1)
+      val remainingPath =
+        Path().apply {
+          moveTo(remainingOffsets.first().x, remainingOffsets.first().y)
+          remainingOffsets.drop(1).forEach { lineTo(it.x, it.y) }
+        }
+      drawPath(remainingPath, remainingColor, style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round))
+    }
+
+    routeOffsets.forEachIndexed { index, routeOffset ->
+      val isRemaining = targetIndex != null && index <= targetIndex
+      drawCircle(
+        color = if (isRemaining) remainingColor.copy(alpha = 0.75f) else completedColor,
+        radius = 3.dp.toPx(),
+        center = routeOffset,
+      )
+    }
+    drawCircle(startColor, radius = 9.dp.toPx(), center = routeOffsets.first())
+    targetIndex?.let { index ->
+      drawCircle(background, radius = 12.dp.toPx(), center = routeOffsets[index])
+      drawCircle(remainingColor, radius = 9.dp.toPx(), center = routeOffsets[index])
+    }
+    currentLocation?.let { location ->
+      val currentOffset = offset(location)
+      drawCircle(background, radius = 12.dp.toPx(), center = currentOffset)
+      drawCircle(currentColor, radius = 8.dp.toPx(), center = currentOffset)
+    }
+  }
+}
+
+@Composable
 private fun TrailMetric(
   label: String,
   value: String,
@@ -559,14 +663,14 @@ private fun TrailMetric(
 }
 
 @Composable
-private fun DirectionCompassCard(
-  targetBearingDegrees: Float,
-  deviceHeadingDegrees: Float,
-  distanceMeters: Int,
-  gpsAccuracy: String,
-) {
-  val relativeBearing = (targetBearingDegrees - deviceHeadingDegrees + 360f) % 360f
-  val cardinalDirection = cardinalDirection(targetBearingDegrees)
+private fun BacktrackGuidanceCard(state: ReturnUiState) {
+  val targetIndex = requireNotNull(state.targetBreadcrumbIndex)
+  val relativeBearing =
+    if (state.targetBearingDegrees != null && state.deviceHeadingDegrees != null) {
+      (state.targetBearingDegrees - state.deviceHeadingDegrees + 360f) % 360f
+    } else {
+      null
+    }
   Card(
     shape = RoundedCornerShape(8.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -577,35 +681,39 @@ private fun DirectionCompassCard(
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      Text("Follow the arrow", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+      Text("Follow the recorded route", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+      Text(
+        "Next breadcrumb ${targetIndex + 1} of ${state.totalBreadcrumbs}",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
       Box(
         modifier =
-          Modifier.size(220.dp)
+          Modifier.size(190.dp)
             .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
             .semantics {
               contentDescription =
-                "Direction arrow pointing $cardinalDirection at ${targetBearingDegrees.toInt()} degrees"
+                "Backtrack arrow to breadcrumb ${targetIndex + 1} of ${state.totalBreadcrumbs}"
             },
         contentAlignment = Alignment.Center,
       ) {
-        DirectionArrow(relativeBearingDegrees = relativeBearing, modifier = Modifier.fillMaxSize().padding(26.dp))
-        Text("N", modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp), fontWeight = FontWeight.Bold)
-        Text("E", modifier = Modifier.align(Alignment.CenterEnd).padding(end = 10.dp), fontWeight = FontWeight.SemiBold)
-        Text("S", modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp), fontWeight = FontWeight.SemiBold)
-        Text("W", modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp), fontWeight = FontWeight.SemiBold)
+        if (relativeBearing != null) {
+          DirectionArrow(relativeBearingDegrees = relativeBearing, modifier = Modifier.fillMaxSize().padding(24.dp))
+        } else {
+          Text("Waiting for\ncompass", textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
+        }
       }
       Text(
-        "$distanceMeters m to next breadcrumb",
+        "${state.distanceToNextMeters} m to the next saved point",
         style = MaterialTheme.typography.headlineSmall,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
       )
       Text(
-        "${targetBearingDegrees.toInt()}° $cardinalDirection · $gpsAccuracy",
+        state.accuracyMeters?.let { "Live GPS ±${it.toInt()} m" } ?: "Waiting for GPS accuracy",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
       Text(
-        "Turn with your phone until the arrow points straight ahead, then walk toward the next breadcrumb.",
+        "Turn until the arrow points up, then walk toward the highlighted breadcrumb on your recorded path.",
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -652,12 +760,6 @@ private fun DirectionArrow(
     }
     drawCircle(color = arrowColor, radius = 10.dp.toPx(), center = center)
   }
-}
-
-private fun cardinalDirection(bearingDegrees: Float): String {
-  val directions = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
-  val normalized = (bearingDegrees % 360f + 360f) % 360f
-  return directions[((normalized + 22.5f) / 45f).toInt() % directions.size]
 }
 
 @Composable
@@ -723,6 +825,6 @@ private fun HomeScreenPreview() {
 @Composable
 private fun ReturnModeScreenPreview() {
   FindWayTheme(dynamicColor = false) {
-    ReturnModeScreen(state = ReturnUiState(), onBack = {}, onOpenSos = {})
+    ReturnModeScreen(state = ReturnUiState(), onBack = {}, onOpenSos = {}, onFinish = {})
   }
 }

@@ -35,10 +35,12 @@ import kotlinx.coroutines.launch
 class TrailRecordingService : Service() {
   @Inject lateinit var fusedLocationClient: FusedLocationProviderClient
   @Inject lateinit var trailRepository: TrailRepository
+  @Inject lateinit var currentLocationStore: CurrentLocationStore
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private var recordingJob: Job? = null
   private var requestingUpdates = false
+  @Volatile private var mode = ServiceMode.RECORDING
 
   private val locationRequest =
     LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MILLIS)
@@ -50,15 +52,16 @@ class TrailRecordingService : Service() {
     object : LocationCallback() {
       override fun onLocationResult(result: LocationResult) {
         result.locations.forEach { location ->
-          serviceScope.launch {
-            trailRepository.appendBreadcrumb(
-              TrailPoint(
-                latitude = location.latitude,
-                longitude = location.longitude,
-                accuracyMeters = location.accuracy,
-                timestampMillis = location.time,
-              ),
+          val point =
+            TrailPoint(
+              latitude = location.latitude,
+              longitude = location.longitude,
+              accuracyMeters = location.accuracy,
+              timestampMillis = location.time,
             )
+          currentLocationStore.update(point)
+          serviceScope.launch {
+            if (mode == ServiceMode.RECORDING) trailRepository.appendBreadcrumb(point)
           }
         }
       }
@@ -76,9 +79,11 @@ class TrailRecordingService : Service() {
   ): Int {
     when (intent?.action) {
       ACTION_STOP -> stopRecording()
-      else -> startRecording()
+      ACTION_BACKTRACK -> startBacktracking()
+      ACTION_START -> startRecording()
+      else -> stopSelf()
     }
-    return START_STICKY
+    return START_REDELIVER_INTENT
   }
 
   override fun onBind(intent: Intent?): IBinder? = null
@@ -90,13 +95,20 @@ class TrailRecordingService : Service() {
   }
 
   private fun startRecording() {
-    if (recordingJob?.isActive == true || requestingUpdates) return
-    startInForeground()
+    mode = ServiceMode.RECORDING
+    startInForeground(isBacktracking = false)
+    if (recordingJob?.isActive == true) return
     recordingJob =
       serviceScope.launch {
         trailRepository.startTrail(System.currentTimeMillis())
         requestLocationUpdates()
       }
+  }
+
+  private fun startBacktracking() {
+    mode = ServiceMode.BACKTRACKING
+    startInForeground(isBacktracking = true)
+    requestLocationUpdates()
   }
 
   private fun requestLocationUpdates() {
@@ -109,6 +121,7 @@ class TrailRecordingService : Service() {
       return
     }
 
+    if (requestingUpdates) return
     requestingUpdates = true
     fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
   }
@@ -125,7 +138,7 @@ class TrailRecordingService : Service() {
       }
   }
 
-  private fun startInForeground() {
+  private fun startInForeground(isBacktracking: Boolean) {
     val openAppIntent =
       PendingIntent.getActivity(
         this,
@@ -143,8 +156,12 @@ class TrailRecordingService : Service() {
     val notification =
       NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
         .setSmallIcon(R.drawable.ic_stat_location)
-        .setContentTitle(getString(R.string.recording_notification_title))
-        .setContentText(getString(R.string.recording_notification_body))
+        .setContentTitle(
+          getString(if (isBacktracking) R.string.backtracking_notification_title else R.string.recording_notification_title),
+        )
+        .setContentText(
+          getString(if (isBacktracking) R.string.backtracking_notification_body else R.string.recording_notification_body),
+        )
         .setContentIntent(openAppIntent)
         .setOngoing(true)
         .setOnlyAlertOnce(true)
@@ -180,5 +197,12 @@ class TrailRecordingService : Service() {
     private const val LOCATION_INTERVAL_MILLIS = 5_000L
     private const val MIN_LOCATION_INTERVAL_MILLIS = 2_000L
     private const val MIN_LOCATION_DISTANCE_METERS = 2f
+
+    const val ACTION_BACKTRACK = "com.example.findway.action.BACKTRACK"
+  }
+
+  private enum class ServiceMode {
+    RECORDING,
+    BACKTRACKING,
   }
 }

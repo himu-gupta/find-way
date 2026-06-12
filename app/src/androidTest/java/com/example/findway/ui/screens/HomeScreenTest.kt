@@ -2,8 +2,9 @@ package com.example.findway.ui.screens
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import com.example.findway.theme.FindWayTheme
 import com.example.findway.ui.model.HomeUiState
 import org.junit.Before
@@ -33,8 +34,9 @@ class HomeScreenTest {
   fun homeScreen_showsPrimarySafetyActions() {
     composeTestRule.onNodeWithText("Trail readiness").assertExists()
     composeTestRule.onNodeWithText("Location access").assertExists()
-    composeTestRule.onNodeWithText("Start Trail").performScrollTo().assertExists()
-    composeTestRule.onNodeWithText("Saved Trails").performScrollTo().assertExists()
-    composeTestRule.onNodeWithText("SOS").performScrollTo().assertExists()
+    composeTestRule.onNode(hasScrollAction()).performScrollToIndex(2)
+    composeTestRule.onNodeWithText("Start Trail").assertExists()
+    composeTestRule.onNodeWithText("Saved Trails").assertExists()
+    composeTestRule.onNodeWithText("SOS").assertExists()
   }
 }

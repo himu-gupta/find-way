@@ -18,13 +18,18 @@ data class TrackingUiState(
 
 data class ReturnUiState(
   val breadcrumbs: List<TrailPoint> = emptyList(),
+  val currentLocation: TrailPoint? = null,
   val deviceHeadingDegrees: Float? = null,
   val targetBearingDegrees: Float? = null,
+  val targetBreadcrumbIndex: Int? = null,
+  val totalBreadcrumbs: Int = 0,
   val distanceToNextMeters: Int = 0,
   val remainingDistanceMeters: Int = 0,
   val accuracyMeters: Float? = null,
   val offRouteDistanceMeters: Int = 0,
   val isOffRoute: Boolean = false,
+  val isBacktracking: Boolean = false,
+  val isComplete: Boolean = false,
 )
 
 data class SavedTrailUiItem(

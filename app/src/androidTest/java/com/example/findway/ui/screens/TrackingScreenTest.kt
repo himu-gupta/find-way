@@ -2,9 +2,10 @@ package com.example.findway.ui.screens
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import com.example.findway.theme.FindWayTheme
 import com.example.findway.domain.TrailPoint
 import com.example.findway.ui.model.TrackingUiState
@@ -46,6 +47,7 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithText("Live breadcrumb trail").assertExists()
     composeTestRule.onNodeWithText("2 points recorded").assertExists()
     composeTestRule.onNode(hasContentDescription("Recorded breadcrumb route with 2 points")).assertExists()
-    composeTestRule.onNodeWithText("Take Me Back").performScrollTo().assertExists()
+    composeTestRule.onNode(hasScrollAction()).performScrollToIndex(2)
+    composeTestRule.onNodeWithText("Take Me Back").assertExists()
   }
 }

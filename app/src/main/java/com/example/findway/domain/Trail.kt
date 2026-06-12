@@ -1,5 +1,12 @@
 package com.example.findway.domain
 
+data class TrailPoint(
+  val latitude: Double,
+  val longitude: Double,
+  val accuracyMeters: Float? = null,
+  val timestampMillis: Long = 0L,
+)
+
 data class Trail(
   val id: Long,
   val name: String,

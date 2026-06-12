@@ -4,10 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.findway.data.TrailRepository
 import com.example.findway.device.DeviceStatusProvider
-import com.example.findway.domain.ReturnProgress
+import com.example.findway.domain.BacktrackNavigator
 import com.example.findway.domain.Trail
-import com.example.findway.domain.TrailProgressCalculator
+import com.example.findway.domain.TrailPoint
 import com.example.findway.domain.routeDistanceMeters
+import com.example.findway.location.CurrentLocationStore
 import com.example.findway.location.HeadingProvider
 import com.example.findway.location.TrailRecordingController
 import com.example.findway.ui.model.HomeUiState
@@ -39,11 +40,15 @@ class AppViewModel @Inject constructor(
   private val recordingController: TrailRecordingController,
   private val deviceStatusProvider: DeviceStatusProvider,
   headingProvider: HeadingProvider,
+  currentLocationStore: CurrentLocationStore,
 ) : ViewModel() {
   private val activeTrail =
     repository.observeActiveTrail().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
   private val deviceStatus = MutableStateFlow(deviceStatusProvider.currentStatus())
   private val selectedTrailId = MutableStateFlow<Long?>(null)
+  private val backtrackRoute = MutableStateFlow<List<TrailPoint>>(emptyList())
+  private val isBacktracking = MutableStateFlow(false)
+  private var backtrackNavigator: BacktrackNavigator? = null
   private val now = tickerFlow()
 
   val homeUiState: StateFlow<HomeUiState> =
@@ -61,7 +66,9 @@ class AppViewModel @Inject constructor(
       .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackingUiState())
 
   val returnUiState: StateFlow<ReturnUiState> =
-    combine(activeTrail, headingProvider.headings) { trail, heading -> trail.toReturnUiState(heading) }
+    combine(backtrackRoute, currentLocationStore.location, headingProvider.headings, isBacktracking) { route, location, heading, active ->
+        toReturnUiState(route, location, heading, active)
+      }
       .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReturnUiState())
 
   val savedTrails: StateFlow<List<SavedTrailUiItem>> =
@@ -80,7 +87,24 @@ class AppViewModel @Inject constructor(
 
   fun startRecording() = recordingController.start()
 
-  fun stopRecording() = recordingController.stop()
+  fun stopRecording() {
+    resetBacktracking()
+    recordingController.stop()
+  }
+
+  fun startBacktracking() {
+    val route = activeTrail.value?.breadcrumbs.orEmpty()
+    if (route.size < 2) return
+    backtrackRoute.value = route.toList()
+    backtrackNavigator = BacktrackNavigator(route)
+    isBacktracking.value = true
+    recordingController.startBacktracking()
+  }
+
+  fun cancelBacktracking() {
+    resetBacktracking()
+    recordingController.start()
+  }
 
   fun selectTrail(trailId: Long) {
     selectedTrailId.value = trailId
@@ -97,26 +121,44 @@ class AppViewModel @Inject constructor(
     )
   }
 
-  private fun Trail?.toReturnUiState(deviceHeading: Float?): ReturnUiState {
-    if (this == null || breadcrumbs.size < 2) {
+  private fun toReturnUiState(
+    route: List<TrailPoint>,
+    currentLocation: TrailPoint?,
+    deviceHeading: Float?,
+    active: Boolean,
+  ): ReturnUiState {
+    if (!active || route.size < 2 || currentLocation == null) {
       return ReturnUiState(
-        breadcrumbs = this?.breadcrumbs.orEmpty(),
+        breadcrumbs = route,
+        currentLocation = currentLocation,
         deviceHeadingDegrees = deviceHeading,
-        accuracyMeters = this?.breadcrumbs?.lastOrNull()?.accuracyMeters,
+        totalBreadcrumbs = route.size,
+        accuracyMeters = currentLocation?.accuracyMeters,
+        isBacktracking = active,
       )
     }
-    val currentLocation = breadcrumbs.last()
-    val progress: ReturnProgress = TrailProgressCalculator().calculateReturnProgress(currentLocation, breadcrumbs)
+    val progress = backtrackNavigator?.update(currentLocation) ?: return ReturnUiState()
     return ReturnUiState(
-      breadcrumbs = breadcrumbs,
+      breadcrumbs = route,
+      currentLocation = currentLocation,
       deviceHeadingDegrees = deviceHeading,
       targetBearingDegrees = progress.bearingToNextDegrees?.toFloat(),
+      targetBreadcrumbIndex = progress.targetIndex,
+      totalBreadcrumbs = progress.totalBreadcrumbs,
       distanceToNextMeters = progress.distanceToNextMeters,
       remainingDistanceMeters = progress.remainingDistanceMeters,
       accuracyMeters = currentLocation.accuracyMeters,
       offRouteDistanceMeters = progress.offRouteDistanceMeters,
       isOffRoute = progress.isOffRoute,
+      isBacktracking = true,
+      isComplete = progress.isComplete,
     )
+  }
+
+  private fun resetBacktracking() {
+    isBacktracking.value = false
+    backtrackRoute.value = emptyList()
+    backtrackNavigator = null
   }
 
   private fun Trail.toSavedTrailUiItem(): SavedTrailUiItem =

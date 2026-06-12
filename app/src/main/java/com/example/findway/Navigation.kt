@@ -94,7 +94,10 @@ fun MainNavigation() {
           TrackingScreen(
             state = trackingUiState,
             onBack = { backStack.removeLastOrNull() },
-            onTakeMeBack = dropUnlessResumed { backStack.add(ReturnMode) },
+            onTakeMeBack = dropUnlessResumed {
+              viewModel.startBacktracking()
+              backStack.add(ReturnMode)
+            },
             onOpenSos = dropUnlessResumed { backStack.add(Sos) },
             onStop = {
               viewModel.stopRecording()
@@ -103,10 +106,22 @@ fun MainNavigation() {
           )
         }
         entry<ReturnMode> {
+          fun finishBacktrack() {
+            viewModel.stopRecording()
+            while (backStack.size > 1) backStack.removeLastOrNull()
+          }
           ReturnModeScreen(
             state = returnUiState,
-            onBack = { backStack.removeLastOrNull() },
+            onBack = {
+              if (returnUiState.isComplete) {
+                finishBacktrack()
+              } else {
+                viewModel.cancelBacktracking()
+                backStack.removeLastOrNull()
+              }
+            },
             onOpenSos = dropUnlessResumed { backStack.add(Sos) },
+            onFinish = ::finishBacktrack,
           )
         }
         entry<SavedTrails> {

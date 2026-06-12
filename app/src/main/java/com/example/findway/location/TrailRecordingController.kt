@@ -18,6 +18,13 @@ class TrailRecordingController @Inject constructor(
     )
   }
 
+  fun startBacktracking() {
+    ContextCompat.startForegroundService(
+      context,
+      Intent(context, TrailRecordingService::class.java).setAction(TrailRecordingService.ACTION_BACKTRACK),
+    )
+  }
+
   fun stop() {
     context.startService(
       Intent(context, TrailRecordingService::class.java).setAction(TrailRecordingService.ACTION_STOP),

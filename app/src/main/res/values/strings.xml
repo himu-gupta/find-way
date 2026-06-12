@@ -4,5 +4,7 @@
     <string name="recording_channel_description">Keeps your breadcrumb trail recording while Find Way is not visible.</string>
     <string name="recording_notification_title">Recording your trail</string>
     <string name="recording_notification_body">Find Way is saving GPS breadcrumbs for your return.</string>
+    <string name="backtracking_notification_title">Backtracking your trail</string>
+    <string name="backtracking_notification_body">Find Way is guiding you through saved breadcrumbs in reverse.</string>
     <string name="stop_tracking">Stop tracking</string>
 </resources>
